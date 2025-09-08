@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>大考打卡计划 · Exam Check‑in Tracker</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* Small UX niceties */
+    input, select, button { outline: none; }
+    .btn { @apply rounded-xl px-4 py-2 shadow; }
+    .card { @apply rounded-2xl shadow p-4 bg-white; }
+  </style>
+</head>
+<body class="bg-slate-100 min-h-screen">
+  <div class="max-w-7xl mx-auto p-4 space-y-4">
+    <header class="flex items-center justify-between">
+      <h1 class="text-2xl md:text-3xl font-bold">大考打卡计划 <span class="text-slate-500 text-base">Exam Check‑in Tracker</span></h1>
+      <div class="text-sm text-slate-600">本地保存（localStorage）· 无需网络 · 可导入/导出</div>
+    </header>
+
+    <!-- Controls -->
+    <section class="grid md:grid-cols-3 gap-4">
+      <div class="card md:col-span-2">
+        <h2 class="font-semibold mb-3">打卡详情（Butiran Check‑in / Check‑in Details）</h2>
+        <form id="checkinForm" class="grid sm:grid-cols-3 gap-3">
+          <div>
+            <label class="block text-sm text-slate-600 mb-1">学生姓名（Nama Murid / Student Name）</label>
+            <input id="name" class="w-full rounded-xl border p-2" placeholder="例如：李明 / Ali / Siti" required />
+          </div>
+          <div>
+            <label class="block text-sm text-slate-600 mb-1">年级（Tingkatan / Form）</label>
+            <input id="grade" class="w-full rounded-xl border p-2" placeholder="F1 / F2 / F3 / F4 / F5" required />
+          </div>
+          <div>
+            <label class="block text-sm text-slate-600 mb-1">科目（Subjek / Subject）</label>
+            <select id="subject" class="w-full rounded-xl border p-2" required>
+              <option value="BM">BM</option>
+              <option value="BI">BI</option>
+              <option value="BMK">BMK</option>
+              <option value="SEJ">SEJ</option>
+              <option value="MM">MM</option>
+              <option value="SC">SC</option>
+              <option value="GEO">GEO</option>
+              <option value="RBT">RBT</option>
+              <option value="ASK">ASK</option>
+              <option value="BC">BC</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm text-slate-600 mb-1">打卡时长（Minit / Minutes）</label>
+            <input id="minutes" type="number" min="1" step="1" class="w-full rounded-xl border p-2" placeholder="例如：25" />
+          </div>
+          <div>
+            <label class="block text-sm text-slate-600 mb-1">日期（Tarikh / Date）</label>
+            <input id="date" type="date" class="w-full rounded-xl border p-2" />
+          </div>
+          <div class="flex items-end gap-2">
+            <button class="btn bg-blue-600 text-white" id="addBtn" type="submit">添加打卡 / Tambah</button>
+            <button class="btn bg-emerald-600 text-white" id="startBtn" type="button">开始计时</button>
+            <button class="btn bg-amber-600 text-white" id="stopBtn" type="button" disabled>停止并保存</button>
+          </div>
+        </form>
+        <p class="text-xs text-slate-500 mt-2">* 连续累计次数（Streak）按【同一学生 + 同一科目】逐日计算。一天多次打卡只算一天。</p>
+      </div>
+
+      <div class="card">
+        <h2 class="font-semibold mb-3">筛选（Tapis / Filter）</h2>
+        <div class="space-y-3">
+          <input id="qName" class="w-full rounded-xl border p-2" placeholder="按姓名筛选 / Nama" />
+          <select id="qSubject" class="w-full rounded-xl border p-2">
+            <option value="">全部科目 / Semua</option>
+            <option>BM</option><option>BI</option><option>BMK</option><option>SEJ</option><option>MM</option>
+            <option>SC</option><option>GEO</option><option>RBT</option><option>ASK</option><option>BC</option>
+          </select>
+          <div class="flex gap-2">
+            <input id="qFrom" type="date" class="w-full rounded-xl border p-2" />
+            <input id="qTo" type="date" class="w-full rounded-xl border p-2" />
+          </div>
+          <div class="flex gap-2">
+            <button class="btn bg-slate-800 text-white" id="applyFilter" type="button">应用筛选</button>
+            <button class="btn bg-slate-200" id="clearFilter" type="button">清除</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Summary & Tools -->
+    <section class="grid md:grid-cols-3 gap-4">
+      <div class="card md:col-span-2">
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="font-semibold">打卡记录（Rekod / Records）</h2>
+          <div class="flex gap-2">
+            <button class="btn bg-slate-900 text-white" id="exportCsv">导出CSV</button>
+            <button class="btn bg-slate-700 text-white" id="exportJson">导出JSON</button>
+            <label class="btn bg-slate-200 cursor-pointer">导入JSON<input id="importJson" type="file" accept="application/json" class="hidden" /></label>
+            <button class="btn bg-rose-600 text-white" id="resetAll">清空全部</button>
+          </div>
+        </div>
+        <div class="overflow-auto border rounded-xl">
+          <table class="min-w-full text-sm">
+            <thead class="bg-slate-100">
+              <tr class="text-left">
+                <th class="p-2">日期 Date</th>
+                <th class="p-2">姓名 Name</th>
+                <th class="p-2">年级 Form</th>
+                <th class="p-2">科目 Subject</th>
+                <th class="p-2">时长（分）Minutes</th>
+                <th class="p-2">操作</th>
+              </tr>
+            </thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 class="font-semibold mb-3">连续累计次数（Streaks）</h2>
+        <p class="text-xs text-slate-500 mb-2">按【学生+科目】分组，显示当前连续天数。</p>
+        <div class="overflow-auto border rounded-xl">
+          <table class="min-w-full text-sm">
+            <thead class="bg-slate-100">
+              <tr class="text-left">
+                <th class="p-2">姓名 Name</th>
+                <th class="p-2">科目 Subject</th>
+                <th class="p-2">Streak（天）</th>
+              </tr>
+            </thead>
+            <tbody id="streakBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <footer class="text-center text-xs text-slate-500 py-6">Made for 优教育 · 数据仅保存在本机 · Asia/Kuala_Lumpur 本地时间</footer>
+  </div>
+
+<script>
+  // -----------------------------
+  // Utilities
+  // -----------------------------
+  const LS_KEY = 'examCheckinV1';
+  const $ = (id) => document.getElementById(id);
+  const todayStr = () => new Date().toISOString().slice(0,10);
+  const toDateOnly = (d) => {
+    const dt = (d instanceof Date) ? d : new Date(d);
+    return new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
+  }
+  const fmtDate = (s) => s;
+
+  function loadData(){
+    try{ return JSON.parse(localStorage.getItem(LS_KEY)) || []; }
+    catch{ return []; }
+  }
+  function saveData(arr){ localStorage.setItem(LS_KEY, JSON.stringify(arr)); }
+
+  function uid(){ return Math.random().toString(36).slice(2,10); }
+
+  function download(filename, content, type='text/plain'){
+    const blob = new Blob([content], {type});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  // -----------------------------
+  // Timer state
+  // -----------------------------
+  let timer = {running:false, startedAt:null};
+
+  function startTimer(){
+    if(timer.running) return;
+    timer.running = true;
+    timer.startedAt = Date.now();
+    $('startBtn').disabled = true;
+    $('stopBtn').disabled = false;
+  }
+  function stopTimerAndFill(){
+    if(!timer.running) return;
+    const ms = Date.now() - timer.startedAt;
+    const mins = Math.max(1, Math.round(ms/60000));
+    $('minutes').value = mins;
+    timer.running = false;
+    $('startBtn').disabled = false;
+    $('stopBtn').disabled = true;
+  }
+
+  // -----------------------------
+  // Core data ops
+  // -----------------------------
+  function addRecord(rec){
+    const data = loadData();
+    data.push(rec);
+    saveData(data);
+  }
+  function deleteRecord(id){
+    const data = loadData().filter(r => r.id !== id);
+    saveData(data);
+    render();
+  }
+
+  // Compute streaks for (name+subject)
+  function computeStreaks(records){
+    // group by name+subject => set of unique dates
+    const groups = {};
+    for(const r of records){
+      const key = r.name.trim()+'__'+r.subject;
+      const date = r.date;
+      if(!groups[key]) groups[key] = new Set();
+      groups[key].add(date);
+    }
+    const out = [];
+    const today = toDateOnly(new Date());
+    for(const key in groups){
+      const [name, subject] = key.split('__');
+      // Sort dates desc
+      const dates = Array.from(groups[key]).sort((a,b)=> b.localeCompare(a));
+      // Start from latest date; count consecutive backwards by 1 day
+      let streak = 0;
+      // We define "current streak" as: if latest practice is today or yesterday, count back consecutive days.
+      const latest = dates.length? toDateOnly(dates[0]) : null;
+      if(!latest){ out.push({name, subject, streak:0}); continue; }
+      // If gap > 1 day from today to latest, streak = 0
+      const gapDays = Math.round((toDateOnly(today) - latest)/86400000);
+      if(gapDays > 1){ out.push({name, subject, streak:0}); continue; }
+      // Build a set for quick lookup
+      const dset = new Set(dates);
+      // Start at latest; walk back day by day
+      let cursor = latest;
+      while(true){
+        const s = cursor.toISOString().slice(0,10);
+        if(dset.has(s)){
+          streak++;
+          cursor = new Date(cursor.getTime() - 86400000);
+        } else break;
+      }
+      out.push({name, subject, streak});
+    }
+    // sort by streak desc
+    out.sort((a,b)=> b.streak - a.streak || a.name.localeCompare(b.name));
+    return out;
+  }
+
+  // -----------------------------
+  // Rendering
+  // -----------------------------
+  function render(){
+    const data = loadData();
+
+    // Filters
+    const nameQ = $('qName').value.trim().toLowerCase();
+    const subjQ = $('qSubject').value;
+    const from = $('qFrom').value ? toDateOnly($('qFrom').value) : null;
+    const to = $('qTo').value ? toDateOnly($('qTo').value) : null;
+
+    const filtered = data.filter(r=>{
+      if(nameQ && !r.name.toLowerCase().includes(nameQ)) return false;
+      if(subjQ && r.subject !== subjQ) return false;
+      const d = toDateOnly(r.date);
+      if(from && d < from) return false;
+      if(to && d > to) return false;
+      return true;
+    }).sort((a,b)=> (a.date===b.date? (a.name.localeCompare(b.name)) : b.date.localeCompare(a.date)));
+
+    // Table rows
+    const rows = filtered.map(r=>`
+      <tr class="border-t">
+        <td class="p-2 whitespace-nowrap">${fmtDate(r.date)}</td>
+        <td class="p-2">${escapeHtml(r.name)}</td>
+        <td class="p-2">${escapeHtml(r.grade)}</td>
+        <td class="p-2">${r.subject}</td>
+        <td class="p-2">${r.minutes}</td>
+        <td class="p-2">
+          <button class="text-rose-600" onclick="deleteRecord('${r.id}')">删除</button>
+        </td>
+      </tr>`).join('');
+    $('rows').innerHTML = rows || `<tr><td colspan="6" class="p-3 text-center text-slate-400">暂无数据</td></tr>`;
+
+    // Streaks
+    const streaks = computeStreaks(filtered.length? filtered : data);
+    const sb = streaks.map(s=>`
+      <tr class="border-t">
+        <td class="p-2">${escapeHtml(s.name)}</td>
+        <td class="p-2">${s.subject}</td>
+        <td class="p-2">${s.streak}</td>
+      </tr>`).join('');
+    $('streakBody').innerHTML = sb || `<tr><td colspan="3" class="p-3 text-center text-slate-400">暂无</td></tr>`;
+  }
+
+  function escapeHtml(str){
+    return String(str)
+      .replace(/&/g,'&amp;')
+      .replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;')
+      .replace(/'/g,'&#039;');
+  }
+
+  // -----------------------------
+  // CSV / JSON export
+  // -----------------------------
+  function toCSV(arr){
+    const headers = ['id','date','name','grade','subject','minutes'];
+    const lines = [headers.join(',')];
+    for(const r of arr){
+      const row = headers.map(h=>`"${String(r[h]??'').replace(/"/g,'""')}"`).join(',');
+      lines.push(row);
+    }
+    return lines.join('\n');
+  }
+
+  // -----------------------------
+  // Event listeners
+  // -----------------------------
+  window.addEventListener('DOMContentLoaded', ()=>{
+    $('date').value = todayStr();
+    render();
+
+    $('checkinForm').addEventListener('submit', (e)=>{
+      e.preventDefault();
+      if(timer.running){ stopTimerAndFill(); }
+      const name = $('name').value.trim();
+      const grade = $('grade').value.trim();
+      const subject = $('subject').value;
+      const minutes = parseInt($('minutes').value, 10) || 0;
+      const date = $('date').value || todayStr();
+      if(!name || !grade || !subject || minutes <= 0){
+        alert('请填写姓名/年级/科目，并输入有效的时长（分钟）。');
+        return;
+      }
+      addRecord({ id: uid(), date, name, grade, subject, minutes });
+      $('minutes').value = '';
+      render();
+    });
+
+    $('startBtn').addEventListener('click', ()=> startTimer());
+    $('stopBtn').addEventListener('click', ()=> stopTimerAndFill());
+
+    $('applyFilter').addEventListener('click', render);
+    $('clearFilter').addEventListener('click', ()=>{
+      $('qName').value = '';
+      $('qSubject').value = '';
+      $('qFrom').value = '';
+      $('qTo').value = '';
+      render();
+    });
+
+    $('exportCsv').addEventListener('click', ()=>{
+      const data = loadData();
+      if(!data.length) return alert('没有可导出的数据');
+      download('exam-checkin.csv', toCSV(data), 'text/csv');
+    });
+
+    $('exportJson').addEventListener('click', ()=>{
+      const data = loadData();
+      if(!data.length) return alert('没有可导出的数据');
+      download('exam-checkin.json', JSON.stringify(data, null, 2), 'application/json');
+    });
+
+    $('importJson').addEventListener('change', async (e)=>{
+      const file = e.target.files[0];
+      if(!file) return;
+      try{
+        const text = await file.text();
+        const arr = JSON.parse(text);
+        if(!Array.isArray(arr)) throw new Error('文件内容不是数组');
+        // very light validation
+        const cleaned = arr.map(r=>({
+          id: r.id || uid(),
+          date: r.date || todayStr(),
+          name: String(r.name||'').trim(),
+          grade: String(r.grade||'').trim(),
+          subject: r.subject || 'BM',
+          minutes: Number(r.minutes)||0,
+        })).filter(r=> r.name && r.grade && r.minutes>0);
+        saveData(cleaned);
+        render();
+        e.target.value = '';
+      }catch(err){
+        alert('导入失败：'+err.message);
+      }
+    });
+
+    $('resetAll').addEventListener('click', ()=>{
+      if(confirm('确定清空全部数据？此操作不可恢复。')){
+        localStorage.removeItem(LS_KEY);
+        render();
+      }
+    });
+  });
+</script>
+</body>
+</html>
